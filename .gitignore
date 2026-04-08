@@ -1,0 +1,24 @@
+# Ignore system-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore build and dependency directories
+node_modules/
+dist/
+build/
+bin/
+obj/
+
+# Ignore log files
+*.log
+
+# Ignore environment variables and secrets
+.env
+secrets.txt
+
+# Ignore IDE configuration folders
+.vscode/
+.idea/
+
+# Exception: ignore all .log files EXCEPT important.log
+!important.log
