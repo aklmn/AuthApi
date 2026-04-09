@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-
+namespace AuthApi.Models;   
 public class User
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -12,4 +12,7 @@ public class User
     public string PasswordHash { get; set; } = string.Empty;
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+
 }

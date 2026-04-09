@@ -7,9 +7,9 @@ namespace AuthApi.Controllers;
 [ApiController]
 public class AuthController : ControllerBase
 {
-    private readonly AuthService _authService;
+    private readonly IAuthService _authService;
 
-    public AuthController(AuthService authService)
+    public AuthController(IAuthService authService)
     {
         _authService = authService;
     }
@@ -19,7 +19,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var (access, refresh) = await _authService.RegisterAsync(request.Email, request.Password);
+            var (access, refresh) = await _authService.RegisterAsync(request.Email, request.Password, request.Role);
             return Ok(new { accessToken = access, refreshToken = refresh });
         }
         catch (Exception ex)
@@ -57,6 +57,6 @@ public class AuthController : ControllerBase
     }
 }
 
-public class RegisterRequest { public string Email { get; set; } = string.Empty; public string Password { get; set; } = string.Empty; }
+public class RegisterRequest { public string Email { get; set; } = string.Empty; public string Password { get; set; } = string.Empty; public string Role { get; set; } = "User"; }
 public class LoginRequest { public string Email { get; set; } = string.Empty; public string Password { get; set; } = string.Empty; }
 public class RefreshRequest { public string AccessToken { get; set; } = string.Empty; public string RefreshToken { get; set; } = string.Empty; }

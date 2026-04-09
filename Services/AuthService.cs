@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
 using AuthApi.Data; 
 using AuthApi.Models;
-
+using System.Text;
 
 namespace AuthApi.Services;
-
-public class AuthService
+public class AuthService: IAuthService
 {
     private readonly AppDbContext _context;
     private readonly ITokenService _tokenService;
@@ -25,7 +25,7 @@ public class AuthService
     /// <summary>
     /// Register user baru + langsung login (mengembalikan token)
     /// </summary>
-    public async Task<(string AccessToken, string RefreshToken)> RegisterAsync(string email, string password)
+    public async Task<(string AccessToken, string RefreshToken)> RegisterAsync1(string email, string password)
     {
         if (await _context.Users.AnyAsync(u => u.Email == email))
             throw new Exception("Email sudah terdaftar");
@@ -33,7 +33,7 @@ public class AuthService
         var user = new User
         {
             Email = email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password)
+            PasswordHash = HashMd5(password)
         };
 
         _context.Users.Add(user);
@@ -43,13 +43,42 @@ public class AuthService
         return await LoginAsync(email, password);
     }
 
+    public async Task<(string AccessToken, string RefreshToken)> RegisterAsync(string email, string password, string role = "User")
+    {
+        if (await _context.Users.AnyAsync(u => u.Email == email))
+            throw new Exception("Email sudah terdaftar");
+
+        var user = new User
+        {
+            Email = email,
+            PasswordHash = HashMd5(password)
+        };
+
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        // Assign default role "User"
+        var userRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == role);
+        if (userRole == null) 
+        {            
+            userRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "User");
+        }
+        if (userRole != null)
+        {
+            _context.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = userRole.Id });
+            await _context.SaveChangesAsync();
+        }
+
+        return await LoginAsync(email, password); // login otomatis
+    }
+
     /// <summary>
     /// Login user dan buat Access Token + Refresh Token baru
     /// </summary>
-    public async Task<(string AccessToken, string RefreshToken)> LoginAsync(string email, string password)
+    public async Task<(string AccessToken, string RefreshToken)> LoginAsync2(string email, string password)
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-        if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+        if (user == null || HashMd5(password) != user.PasswordHash)    
             throw new Exception("Email atau password salah");
 
         var accessToken = _tokenService.GenerateAccessToken(user);
@@ -63,6 +92,31 @@ public class AuthService
         };
 
         await _tokenService.SaveRefreshTokenAsync(refreshToken);
+
+        return (accessToken, refreshTokenStr);
+    }
+
+    public async Task<(string AccessToken, string RefreshToken)> LoginAsync(string email, string password)
+    {
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                    .ThenInclude(r => r.RolePermissions)
+                        .ThenInclude(rp => rp.Permission)
+            .FirstOrDefaultAsync(u => u.Email == email);
+
+        if (user == null || HashMd5(password) != user.PasswordHash)
+            throw new Exception("Email atau password salah");
+
+        var accessToken = _tokenService.GenerateAccessToken(user);
+        var refreshTokenStr = _tokenService.GenerateRefreshToken();
+
+        var refreshToken = new RefreshToken
+        {
+            UserId = user.Id,
+            Token = refreshTokenStr,
+            Expires = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpiryDays)
+        };
 
         return (accessToken, refreshTokenStr);
     }
@@ -104,4 +158,12 @@ public class AuthService
         // 6. Kembalikan kedua token baru ke client
         return (newAccessToken, newRefreshTokenStr);
     }
+
+    private static string HashMd5(string input)
+    {
+        var bytes = MD5.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes).ToLower();
+    }
+
+    
 }
